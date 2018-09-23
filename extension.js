@@ -1,52 +1,88 @@
+/* global imports, log */
+
+const Extension = imports.misc.extensionUtils.getCurrentExtension();
+const Sound = Extension.imports.sound;
+const Loader = Extension.imports.loader;
+
 const St = imports.gi.St;
+const Clutter = imports.gi.Clutter;
 const Main = imports.ui.main;
-const Tweener = imports.ui.tweener;
+const PanelMenu = imports.ui.panelMenu;
+const PopupMenu = imports.ui.popupMenu;
+const GLib = imports.gi.GLib;
+const Lang = imports.lang;
+const Gio = imports.gi.Gio;
 
-let text, button;
+const NoiserPopup = new Lang.Class({
+    Name: 'NoiserPopup',
+    Extends: PopupMenu.PopupBaseMenuItem,
 
-function _hideHello() {
-    Main.uiGroup.remove_actor(text);
-    text = null;
-}
+    _init: function() {
+        this.parent({
+            reactive: false,
+            can_focus: false,
+        });
 
-function _showHello() {
-    if (!text) {
-        text = new St.Label({ style_class: 'helloworld-label', text: "Hello, world!" });
-        Main.uiGroup.add_actor(text);
+        this.box = new St.BoxLayout({
+            vertical: true,
+        });
+        this.actor.add(this.box);
+
+        this.loader = new Loader.Loader();
+        this.loader.connect('sounds-loaded', this._onSoundsReady.bind(this));
+    },
+
+    _onSoundsReady: function() {
+        const sounds = this.loader.sounds;
+
+        for (let iterator = 0; iterator < sounds.length; iterator += 2) {
+            const leftSoundComponent = new Sound.SoundComponent(sounds[iterator]);
+            const rightSoundComponent = new Sound.SoundComponent(sounds[iterator + 1]);
+            const line = new St.BoxLayout();
+
+            line.add_child(leftSoundComponent);
+            line.add_child(rightSoundComponent);
+
+            this.box.add_child(line);
+        }
     }
+});
 
-    text.opacity = 255;
+const NoiserButton = new Lang.Class({
+    Name: 'NoiserButton',
+    Extends: PanelMenu.Button,
 
-    let monitor = Main.layoutManager.primaryMonitor;
+    _init: function () {
+        this.parent(0, 'Noiser');
 
-    text.set_position(monitor.x + Math.floor(monitor.width / 2 - text.width / 2),
-                      monitor.y + Math.floor(monitor.height / 2 - text.height / 2));
+        const box = new St.BoxLayout({
+            style_class: 'panel-status-menu-box'
+        });
 
-    Tweener.addTween(text,
-                     { opacity: 0,
-                       time: 2,
-                       transition: 'easeOutQuad',
-                       onComplete: _hideHello });
-}
+        const icon_path = GLib.build_filenamev([Extension.dir.get_path(), "wave.png"]);
+        const gicon = Gio.Icon.new_for_string(icon_path);
+        const icon = new St.Icon({
+            gicon: gicon,
+            style_class: 'system-status-icon'
+        });
+        box.add_child(icon);
+        this.actor.add_child(box);
+
+        const popup = new NoiserPopup();
+        this.menu.addMenuItem(popup);
+    }
+});
+
+let button;
 
 function init() {
-    button = new St.Bin({ style_class: 'panel-button',
-                          reactive: true,
-                          can_focus: true,
-                          x_fill: true,
-                          y_fill: false,
-                          track_hover: true });
-    let icon = new St.Icon({ icon_name: 'system-run-symbolic',
-                             style_class: 'system-status-icon' });
-
-    button.set_child(icon);
-    button.connect('button-press-event', _showHello);
+    // TODO?
 }
 
 function enable() {
-    Main.panel._rightBox.insert_child_at_index(button, 0);
+    Main.panel.addToStatusArea('NoiserButton', new NoiserButton, 0, 'right');
 }
 
 function disable() {
-    Main.panel._rightBox.remove_child(button);
+    button.destroy();
 }
